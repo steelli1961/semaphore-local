@@ -1,0 +1,86 @@
+---
+# User Management Playbook
+# Create, modify, and manage user accounts
+
+- name: Manage user accounts
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  vars:
+    # Define users to create
+    system_users:
+      - username: devops
+        uid: 1100
+        comment: "DevOps User"
+        shell: /bin/bash
+        home: /home/devops
+        groups: sudo,wheel
+      - username: monitoring
+        uid: 1101
+        comment: "Monitoring Agent"
+        shell: /bin/nologin
+        home: /var/lib/monitoring
+        groups: null
+
+  tasks:
+    - name: Create system groups
+      group:
+        name: "{{ item.groups | split(',')[0] }}"
+        state: present
+      loop: "{{ system_users }}"
+      when: item.groups
+      changed_when: false
+
+    - name: Create user accounts
+      user:
+        name: "{{ item.username }}"
+        comment: "{{ item.comment }}"
+        uid: "{{ item.uid }}"
+        home: "{{ item.home }}"
+        shell: "{{ item.shell }}"
+        groups: "{{ item.groups }}"
+        state: present
+      loop: "{{ system_users }}"
+      register: user_creation
+
+    - name: Set up SSH directory
+      file:
+        path: "/home/{{ item }}/.ssh"
+        state: directory
+        owner: "{{ item }}"
+        group: "{{ item }}"
+        mode: '0700'
+      loop:
+        - devops
+        - root
+
+    - name: Display created users
+      debug:
+        msg: "Created user: {{ item.username }} (UID: {{ item.uid }})"
+      loop: "{{ system_users }}"
+      when: user_creation.changed
+
+    - name: Get current users
+      getent:
+        database: passwd
+
+    - name: Report all system users
+      debug:
+        msg: |
+          System Users on {{ ansible_hostname }}:
+          {% for user in getent_passwd %}
+            - {{ user }} (UID: {{ getent_passwd[user][1] }})
+          {% endfor %}
+
+  post_tasks:
+    - name: Verify user creation
+      shell: "id devops"
+      register: user_check
+      changed_when: false
+      failed_when: false
+
+    - name: Display verification
+      debug:
+        msg: "{{ user_check.stdout }}"
+      when: user_check.rc == 0

@@ -1,0 +1,76 @@
+---
+# Package Installation Playbook
+# Install specific packages on target hosts
+
+- name: Install packages on target systems
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Common packages to install
+    common_packages:
+      - curl
+      - wget
+      - git
+      - htop
+      - nano
+      - vim
+      - net-tools
+      - telnet
+
+    debian_packages:
+      - build-essential
+      - python3-pip
+      - python3-venv
+
+    redhat_packages:
+      - gcc
+      - make
+      - Development Tools
+      - python3-pip
+
+  tasks:
+    - name: Install common packages (Debian/Ubuntu)
+      apt:
+        name: "{{ common_packages + debian_packages }}"
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install common packages (RedHat/CentOS)
+      yum:
+        name: "{{ common_packages + redhat_packages }}"
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Install Python pip packages
+      pip:
+        name:
+          - requests
+          - pyyaml
+          - jinja2
+        state: present
+      when: ansible_os_family != "Windows"
+
+    - name: Verify installations
+      shell: "{{ item }}"
+      register: install_check
+      loop:
+        - "curl --version | head -1"
+        - "git --version"
+        - "python3 --version"
+      changed_when: false
+
+    - name: Display installed versions
+      debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ install_check.results }}"
+
+  post_tasks:
+    - name: Cleanup apt cache
+      apt:
+        autoclean: yes
+        autoremove: yes
+      when: ansible_os_family == "Debian"
+      changed_when: false

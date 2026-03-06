@@ -1,0 +1,70 @@
+---
+# System Update Playbook
+# This playbook updates all system packages on target hosts
+
+- name: Update all system packages
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Display hostname and OS info
+      debug:
+        msg: "Updating {{ ansible_hostname }} - {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: Update apt cache (Debian/Ubuntu)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      changed_when: false
+
+    - name: Upgrade all packages (Debian/Ubuntu)
+      apt:
+        upgrade: full
+        autoclean: yes
+        autoremove: yes
+      when: ansible_os_family == "Debian"
+      register: apt_result
+
+    - name: Update package manager cache (RedHat/CentOS)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      changed_when: false
+
+    - name: Upgrade all packages (RedHat/CentOS)
+      yum:
+        name: '*'
+        state: latest
+      when: ansible_os_family == "RedHat"
+      register: yum_result
+
+    - name: Check if reboot is required (Debian/Ubuntu)
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+      when: ansible_os_family == "Debian"
+
+    - name: Display update results
+      debug:
+        msg: "System update completed. Changes: {{ apt_result.changed or yum_result.changed }}"
+
+    - name: Notify if reboot required
+      debug:
+        msg: "WARNING: System reboot is required for updates to take effect"
+      when: 
+        - ansible_os_family == "Debian"
+        - reboot_required_file.stat.exists
+
+  post_tasks:
+    - name: Gather updated package info
+      package_facts:
+        manager: auto
+      register: package_info
+
+    - name: Report completion
+      debug:
+        msg: |
+          ✓ Update completed on {{ ansible_hostname }}
+          - Packages installed: {{ package_info.ansible_facts.ansible_pkg_mgr }}

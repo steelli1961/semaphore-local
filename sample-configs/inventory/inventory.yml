@@ -1,0 +1,65 @@
+---
+# YAML format inventory
+# Alternative inventory format using YAML
+
+all:
+  hosts:
+    # Example hosts - modify with your actual IPs and hostnames
+    # web01.local:
+    #   ansible_host: 192.168.1.10
+    #   ansible_user: ansibleadmin
+    # web02.local:
+    #   ansible_host: 192.168.1.11
+    #   ansible_user: ansibleadmin
+  
+  vars:
+    ansible_connection: ssh
+    ansible_port: 22
+    ansible_timeout: 30
+    ansible_user: root
+    ansible_ssh_private_key_file: ~/.ssh/semaphore_key
+    gather_subset:
+      - network
+      - hardware
+      - os
+
+  children:
+    webservers:
+      hosts:
+        # web01.local: {}
+        # web02.local: {}
+      vars:
+        server_type: web
+        
+    dbservers:
+      hosts:
+        # db01.local: {}
+        # db02.local: {}
+      vars:
+        server_type: database
+        
+    appservers:
+      hosts:
+        # app01.local: {}
+        # app02.local: {}
+      vars:
+        server_type: application
+        
+    monitoring:
+      hosts:
+        # monitor01.local: {}
+      vars:
+        server_type: monitoring
+        
+    development:
+      hosts:
+        # dev01.local: {}
+      vars:
+        server_type: development
+        
+    production:
+      children:
+        - webservers
+        - dbservers
+        - appservers
+        - monitoring

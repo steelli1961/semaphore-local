@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:15-alpine
+    container_name: semaphore-db
+    environment:
+      POSTGRES_DB: semaphore
+      POSTGRES_USER: semaphore_user
+      POSTGRES_PASSWORD: semaphore_password
+    volumes:
+      - semaphore_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semaphore_user -d semaphore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - semaphore_network
+
+  # Semaphore Web UI & API
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    container_name: semaphore-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      # Database Configuration
+      SEMAPHORE_DB_USER: semaphore_user
+      SEMAPHORE_DB_PASS: semaphore_password
+      SEMAPHORE_DB_HOST: database
+      SEMAPHORE_DB_PORT: 5432
+      SEMAPHORE_DB: semaphore
+      SEMAPHORE_DB_DIALECT: postgres
+
+      # Admin User (Change these!)
+      SEMAPHORE_ADMIN: admin
+      SEMAPHORE_ADMIN_PASSWORD: changeme
+      SEMAPHORE_ADMIN_NAME: Administrator
+      SEMAPHORE_ADMIN_EMAIL: admin@localhost
+
+      # Server Configuration
+      SEMAPHORE_ADDRESS: 0.0.0.0
+      SEMAPHORE_PORT: 3000
+      
+      # TLS (Optional - uncomment to enable)
+      # SEMAPHORE_TLS: 'true'
+      # SEMAPHORE_TLS_CERT: /etc/semaphore/cert.pem
+      # SEMAPHORE_TLS_KEY: /etc/semaphore/key.pem
+
+      # Logging
+      SEMAPHORE_LOG_LEVEL: info
+    volumes:
+      # Mount your playbooks directory
+      - ./sample-configs/playbooks:/home/semaphore/playbooks:ro
+      # Mount your inventory files
+      - ./sample-configs/inventory:/home/semaphore/inventory:ro
+      # Optional: Mount SSH keys
+      - ~/.ssh:/home/semaphore/.ssh:ro
+      # Semaphore data directory
+      - semaphore_data:/home/semaphore/.semaphore
+    networks:
+      - semaphore_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  semaphore_network:
+    driver: bridge
+
+volumes:
+  semaphore_db:
+  semaphore_data:
+
+# Additional services (optional)
+# Use these for testing your Semaphore setup with local VMs
+
+# services:
+#   # Example: Local Linux test machine
+#   test-machine-1:
+#     image: ubuntu:22.04
+#     container_name: test-linux-1
+#     hostname: test-machine-1
+#     command: /bin/bash -c "apt-get update && apt-get install -y openssh-server && mkdir -p /run/sshd && /usr/sbin/sshd -D"
+#     networks:
+#       - semaphore_network
+#     expose:
+#       - "22"
+#
+#   test-machine-2:
+#     image: ubuntu:22.04
+#     container_name: test-linux-2
+#     hostname: test-machine-2
+#     command: /bin/bash -c "apt-get update && apt-get install -y openssh-server && mkdir -p /run/sshd && /usr/sbin/sshd -D"
+#     networks:
+#       - semaphore_network
+#     expose:
+#       - "22"

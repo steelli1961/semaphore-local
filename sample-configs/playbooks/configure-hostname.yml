@@ -1,0 +1,80 @@
+---
+# Hostname and Network Configuration Playbook
+# Configure hostname and basic network settings
+
+- name: Configure hostname and network
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    # Hostname format: hostname-group-number
+    # Example: server-webgroup-01
+    hostname_prefix: "server"
+
+  tasks:
+    - name: Display current network configuration
+      debug:
+        msg: |
+          Current hostname: {{ ansible_hostname }}
+          Domain: {{ ansible_domain | default('none') }}
+          IP addresses: {{ ansible_all_ipv4_addresses }}
+          Interfaces: {{ ansible_interfaces }}
+
+    - name: Set hostname (systemd)
+      hostname:
+        name: "{{ hostname_prefix }}-{{ inventory_hostname }}"
+        use: systemd
+      when: ansible_service_mgr == "systemd"
+      register: hostname_change
+
+    - name: Update /etc/hosts file
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^127.0.0.1"
+        line: "127.0.0.1   localhost {{ hostname_prefix }}-{{ inventory_hostname }}"
+        state: present
+      when: hostname_change.changed | default(false)
+
+    - name: Configure network interface (if needed)
+      debug:
+        msg: |
+          To configure static IP, add network settings to inventory.
+          Example:
+            network_ip: 192.168.1.100
+            network_netmask: 255.255.255.0
+            network_gateway: 192.168.1.1
+            network_dns: 8.8.8.8
+
+    - name: Set DNS servers (Debian/Ubuntu)
+      template:
+        src: /dev/stdin
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: '0644'
+      vars:
+        dns_servers: "{{ network_dns | default('8.8.8.8 8.8.4.4') }}"
+      when: ansible_os_family == "Debian"
+      changed_when: false
+
+    - name: Verify hostname change
+      shell: "hostname"
+      register: hostname_verify
+      changed_when: false
+
+    - name: Display new hostname
+      debug:
+        msg: "New hostname: {{ hostname_verify.stdout }}"
+
+  post_tasks:
+    - name: Gather updated facts
+      setup:
+        gather_subset: network
+
+    - name: Report final configuration
+      debug:
+        msg: |
+          ✓ Network Configuration Complete
+          Hostname: {{ ansible_hostname }}
+          IP Addresses: {{ ansible_all_ipv4_addresses }}
